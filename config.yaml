@@ -1,0 +1,172 @@
+# ======================================================================
+# Air Quality Forecasting with Weather Variables — master configuration
+# Single source of truth for cities, CPCB AQI breakpoints, feature and
+# model settings. Every module reads from here (see src/config.py).
+# ======================================================================
+
+project:
+  name: air-quality-forecasting
+  random_seed: 42
+
+paths:
+  data_raw: data/raw
+  data_processed: data/processed
+  db: data/aqi.db
+  models: models
+  outputs: outputs
+
+# ----------------------------------------------------------------------
+# Study area + station registry (also used by the synthetic generator)
+# ----------------------------------------------------------------------
+city:
+  name: Delhi
+  timezone: Asia/Kolkata
+
+stations:
+  - {station_id: DL001, station_name: Anand Vihar,  city: Delhi, lat: 28.6469, lon: 77.3161}
+  - {station_id: DL002, station_name: R K Puram,     city: Delhi, lat: 28.5631, lon: 77.1869}
+  - {station_id: DL003, station_name: Punjabi Bagh,  city: Delhi, lat: 28.6619, lon: 77.1348}
+
+# ----------------------------------------------------------------------
+# Synthetic data generator (mandatory fallback — project runs end-to-end
+# without any downloads). 3 stations x 3 years of hourly data.
+# ----------------------------------------------------------------------
+synthetic:
+  n_years: 3
+  freq: "h"            # hourly base frequency
+  seed: 42
+  end_date: null       # null => use today's date at run time
+
+# ----------------------------------------------------------------------
+# Data handling
+# ----------------------------------------------------------------------
+data:
+  timezone: Asia/Kolkata
+  resample: daily      # primary target granularity
+  hourly_enabled: false
+
+cleaning:
+  pm_min: 0
+  pm_max: 2000.0
+  pm25_over_pm10_ratio: 1.2    # flag PM2.5 > PM10 * 1.2
+  stuck_hours: 24              # same value > 24h => stuck sensor
+  interpolate_max_hours: 3     # hourly gap fill limit
+  interpolate_max_days: 2      # daily gap fill limit
+  drop_station_missing_pct: 40 # drop station if > 40% missing
+
+# ----------------------------------------------------------------------
+# CPCB Indian AQI (National Air Quality Index, 2014).
+# Each breakpoint row: [C_low, C_high, I_low, I_high]  (continuous bands).
+# Sub-index = (I_hi-I_lo)/(C_hi-C_lo) * (C - C_lo) + I_lo.
+# AQI = max of available sub-indices; valid only if >= 3 pollutants and
+# one of them is PM2.5 or PM10.
+# CO is in mg/m3; all other pollutants in ug/m3.
+# ----------------------------------------------------------------------
+aqi:
+  min_pollutants: 3
+  categories:
+    - {name: Good,          low: 0,   high: 50,  color: "#2ecc71", health: "Minimal impact."}
+    - {name: Satisfactory,  low: 51,  high: 100, color: "#9acd32", health: "Minor breathing discomfort to sensitive people."}
+    - {name: Moderate,      low: 101, high: 200, color: "#f1c40f", health: "Breathing discomfort to people with lung/heart disease."}
+    - {name: Poor,          low: 201, high: 300, color: "#e67e22", health: "Breathing discomfort to most on prolonged exposure."}
+    - {name: Very Poor,     low: 301, high: 400, color: "#e74c3c", health: "Respiratory illness on prolonged exposure."}
+    - {name: Severe,        low: 401, high: 500, color: "#7e0023", health: "Affects healthy people; serious impact on those with illness."}
+  breakpoints:
+    pm25:            # 24-hr avg, ug/m3
+      - [0,   30,   0,   50]
+      - [30,  60,   51,  100]
+      - [60,  90,   101, 200]
+      - [90,  120,  201, 300]
+      - [120, 250,  301, 400]
+      - [250, 500,  401, 500]
+    pm10:            # 24-hr avg, ug/m3
+      - [0,   50,   0,   50]
+      - [50,  100,  51,  100]
+      - [100, 250,  101, 200]
+      - [250, 350,  201, 300]
+      - [350, 430,  301, 400]
+      - [430, 600,  401, 500]
+    no2:             # 24-hr avg, ug/m3
+      - [0,   40,   0,   50]
+      - [40,  80,   51,  100]
+      - [80,  180,  101, 200]
+      - [180, 280,  201, 300]
+      - [280, 400,  301, 400]
+      - [400, 500,  401, 500]
+    so2:             # 24-hr avg, ug/m3
+      - [0,    40,   0,   50]
+      - [40,   80,   51,  100]
+      - [80,   380,  101, 200]
+      - [380,  800,  201, 300]
+      - [800,  1600, 301, 400]
+      - [1600, 2000, 401, 500]
+    co:              # 8-hr avg, mg/m3
+      - [0,  1.0,  0,   50]
+      - [1.0, 2.0, 51,  100]
+      - [2.0, 10,  101, 200]
+      - [10,  17,  201, 300]
+      - [17,  34,  301, 400]
+      - [34,  50,  401, 500]
+    o3:              # 8-hr avg, ug/m3
+      - [0,   50,   0,   50]
+      - [50,  100,  51,  100]
+      - [100, 168,  101, 200]
+      - [168, 208,  201, 300]
+      - [208, 748,  301, 400]
+      - [748, 1000, 401, 500]
+
+# ----------------------------------------------------------------------
+# Feature engineering
+# ----------------------------------------------------------------------
+features:
+  lag_pollutants: [pm25, pm10, no2]
+  lags: [0, 1, 2, 3, 7]
+  rolling_windows: [3, 7]
+  rolling_stats: [mean, max, std]
+  weather_vars: [temp_c, humidity_pct, wind_speed_ms, pressure_hpa, precip_mm, cloud_pct]
+  modes: [A, B]          # A = strict (no future weather); B = + next-day weather
+  crop_burning_months: [10, 11]   # Oct-Nov stubble-burning season (North India)
+
+# ----------------------------------------------------------------------
+# Modelling
+# ----------------------------------------------------------------------
+models:
+  target: pm25
+  event_threshold_pm25: 90.0     # high-pollution event (ug/m3)
+  split: {train: 0.70, val: 0.15, test: 0.15}
+  cv_splits: 5
+  ridge:
+    alphas: [0.001, 0.01, 0.1, 1.0, 10.0, 100.0]
+  random_forest:
+    n_iter: 25
+    param_grid:
+      n_estimators: [100, 200, 300, 500]
+      max_depth: [null, 5, 10, 20, 30]
+      min_samples_leaf: [1, 2, 4, 8]
+      max_features: ["sqrt", "log2", 0.5, 1.0]
+  hist_gb:
+    enabled: true
+    param_grid:
+      max_iter: [200, 400]
+      learning_rate: [0.03, 0.05, 0.1]
+      max_leaf_nodes: [15, 31, 63]
+      min_samples_leaf: [10, 20, 40]
+  sarimax:
+    enabled: false
+    order: [1, 0, 1]
+    seasonal_order: [1, 0, 1, 7]
+
+# ----------------------------------------------------------------------
+# External weather API (Open-Meteo, no key required)
+# ----------------------------------------------------------------------
+open_meteo:
+  historical_url: "https://archive-api.open-meteo.com/v1/archive"
+  forecast_url: "https://api.open-meteo.com/v1/forecast"
+  cache_dir: data/raw/open_meteo_cache
+
+# ----------------------------------------------------------------------
+# API server
+# ----------------------------------------------------------------------
+api:
+  host: "127.0.0.1"
+  port: 8000

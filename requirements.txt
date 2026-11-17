@@ -1,0 +1,45 @@
+# Air Quality Forecasting — dependencies (latest versions, pinned 2026-11).
+# Core data / ML
+pandas==3.1.1
+numpy==2.5.5
+scikit-learn==1.9.1
+scipy==1.18.1
+statsmodels==0.15.0
+
+# Web / API
+fastapi==0.163.1
+uvicorn[standard]==0.54.0
+pydantic==2.14.3
+pydantic-settings==2.16.3
+httpx==0.28.1
+requests==2.34.2
+python-multipart==0.0.34
+
+# Database
+SQLAlchemy==2.1.9
+
+# Model persistence
+joblib==1.6.0
+
+# Visualization (offline report figures)
+matplotlib==3.11.2
+seaborn==0.13.2
+plotly==7.1.0
+kaleido==1.5.1
+
+# Reporting (Jinja2 + markdown -> HTML/PDF; xhtml2pdf is pure-python, Windows-safe)
+jinja2==3.1.6
+markdown==3.11.3
+xhtml2pdf==0.2.28
+
+# Scheduling (optional daily refresh/retrain)
+APScheduler==3.11.3
+
+# Config
+PyYAML==6.0.3
+
+# Testing / quality
+pytest==9.2.0
+pytest-cov==7.1.0
+ruff==0.17.5
+black==26.10.1

@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual env
+.venv/
+venv/
+
+# Data / artifacts (keep folders, ignore contents)
+data/aqi.db
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+models/*.joblib
+outputs/*
+!outputs/.gitkeep
+
+# Scratch
+_spec_extracted.txt
+_extract_pdf.py
+.env

@@ -1,0 +1,36 @@
+version: "3.9"
+
+# ============================================================
+# Air Quality Forecasting — docker-compose
+# Usage:
+#   docker-compose up --build        # build + start
+#   docker-compose up -d             # detached
+#   docker-compose down              # stop + remove container
+# ============================================================
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: air-quality-forecast:latest
+    container_name: air_quality_api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist the SQLite DB and trained models between restarts.
+      # Remove these volume mounts to always start fresh.
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./outputs:/app/outputs
+    environment:
+      # Logging level for uvicorn; override with LOG_LEVEL=warning
+      - LOG_LEVEL=info
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s   # allow time for the pipeline to run on first start

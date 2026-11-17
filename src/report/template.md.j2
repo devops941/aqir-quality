@@ -1,0 +1,150 @@
+# Air Quality Forecasting Report
+## {{ city }} — Next-Day PM2.5 / AQI Forecast Study
+
+**Generated at:** {{ generated_at }}
+**Study city:** {{ city }}
+**Stations:** {% for s in stations %}{{ s.station_name }} ({{ s.station_id }}){% if not loop.last %}, {% endif %}{% endfor %}
+
+---
+
+## 1. Dataset Summary
+
+| Parameter | Value |
+|-----------|-------|
+| Date range | {{ date_range_start }} to {{ date_range_end }} |
+| Total days (station-readings) | {{ total_aq_readings }} |
+| Weather readings | {{ total_weather_readings }} |
+| Daily feature rows | {{ total_daily_features }} |
+| Stations | {{ stations | length }} |
+| Imputed readings | {{ imputed_count }} ({{ imputed_pct }}% of total) |
+| Predictions stored | {{ total_predictions }} |
+
+**Stations detail:**
+
+| Station ID | Name | Latitude | Longitude |
+|------------|------|----------|-----------|
+{% for s in stations %}| {{ s.station_id }} | {{ s.station_name }} | {{ s.lat }} | {{ s.lon }} |
+{% endfor %}
+
+---
+
+## 2. Model Comparison
+
+All models were trained with a chronological 70/15/15 train/val/test split. The best model (lowest test RMSE) is flagged with *.
+
+| Model | Mode | MAE | RMSE | R² | MAPE (%) | Skill vs Persistence | Category Acc. | Event F1 |
+|-------|------|-----|------|----|----------|----------------------|---------------|----------|
+{% for m in model_comparison %}| {{ m.model_name }}{% if m.is_best %} **(best)**{% endif %} | {{ m.feature_mode }} | {{ "%.3f"|format(m.mae) }} | {{ "%.3f"|format(m.rmse) }} | {{ "%.4f"|format(m.r2) }} | {{ "%.2f"|format(m.mape) }} | {{ "%.4f"|format(m.skill_vs_persistence) if m.skill_vs_persistence is not none else "N/A" }} | {{ "%.4f"|format(m.category_accuracy) }} | {{ "%.4f"|format(m.event_f1) }} |
+{% endfor %}
+
+---
+
+## 3. Best Model Highlight
+
+- **Model:** {{ best_model.model_name }}
+- **Feature Mode:** Mode {{ best_model.feature_mode }} ({% if best_model.feature_mode == 'A' %}strict forecast — only information available at time t{% else %}with next-day weather forecast as extra features{% endif %})
+- **MAE:** {{ "%.3f"|format(best_model.mae) }} µg/m³
+- **RMSE:** {{ "%.3f"|format(best_model.rmse) }} µg/m³
+- **R²:** {{ "%.4f"|format(best_model.r2) }}
+- **MAPE:** {{ "%.2f"|format(best_model.mape) }}%
+- **Skill vs Persistence:** {{ "%.4f"|format(best_model.skill_vs_persistence) }}
+- **Category Accuracy:** {{ "%.4f"|format(best_model.category_accuracy) }}
+- **Event F1:** {{ "%.4f"|format(best_model.event_f1) }}
+- **Test period:** {{ test_period_start }} to {{ test_period_end }}
+
+---
+
+## 4. Metrics by Season (Best Model)
+
+| Season | MAE | RMSE | R² | MAPE (%) | Category Acc. | Event F1 |
+|--------|-----|------|----|----------|---------------|----------|
+{% for m in seasonal_metrics %}| {{ m.scope | replace("season:", "") | title }} | {{ "%.3f"|format(m.mae) }} | {{ "%.3f"|format(m.rmse) }} | {{ "%.4f"|format(m.r2) }} | {{ "%.2f"|format(m.mape) }} | {{ "%.4f"|format(m.category_accuracy) if m.category_accuracy is not none else "N/A" }} | {{ "%.4f"|format(m.event_f1) if m.event_f1 is not none else "N/A" }} |
+{% endfor %}
+
+---
+
+## 5. Metrics by Station (Best Model)
+
+| Station | MAE | RMSE | R² | MAPE (%) | Skill vs Persistence | Category Acc. | Event F1 |
+|---------|-----|------|----|----------|----------------------|---------------|----------|
+{% for m in station_metrics %}| {{ m.scope | replace("station:", "") }} | {{ "%.3f"|format(m.mae) }} | {{ "%.3f"|format(m.rmse) }} | {{ "%.4f"|format(m.r2) }} | {{ "%.2f"|format(m.mape) }} | {{ "%.4f"|format(m.skill_vs_persistence) if m.skill_vs_persistence is not none else "N/A" }} | {{ "%.4f"|format(m.category_accuracy) }} | {{ "%.4f"|format(m.event_f1) }} |
+{% endfor %}
+
+---
+
+## 6. Figures
+
+### 6.1 Predicted vs Actual PM2.5 (Time Series)
+
+![Predicted vs Actual PM2.5 over the test period]({{ figures.pred_vs_actual }})
+
+### 6.2 Scatter: Predicted vs Actual
+
+![Scatter plot of predicted vs actual PM2.5 values]({{ figures.scatter }})
+
+### 6.3 Feature Importance (Permutation)
+
+![Top feature importances by permutation importance]({{ figures.feature_importance }})
+
+### 6.4 Residuals Over Time
+
+![Residuals (true − predicted) over the test period]({{ figures.residuals }})
+
+---
+
+## 7. Methodology
+
+### 7.1 Feature Modes
+
+**Mode A — Strict Forecast (default):** Uses only information available at time *t* to predict PM2.5 at time *t+1*. Features include pollutant lags (PM2.5, PM10, NO2 at t, t-1, t-2, t-3, t-7), rolling 3/7-day statistics, today's weather, calendar variables, and event flags. This represents an honest real-world forecast with no future information.
+
+**Mode B — With Weather Forecast:** Adds next-day weather variables (temperature, humidity, wind speed, precipitation, pressure, cloud cover) as features. In training, observed future weather is used as a proxy for a perfect weather forecast. Mode B results with observed future weather are **optimistic** and not achievable in production without an accurate weather forecast service.
+
+### 7.2 Data Leakage Controls
+
+- All lags use `shift(k)` with `k ≥ 1` relative to the target date.
+- Rolling windows end at day *t* (not t+1).
+- Scaling and imputation statistics are fitted **only on the training fold**.
+- No random shuffling: chronological ordering is preserved throughout.
+- The target variable (next-day PM2.5) is never imputed in the evaluation period.
+
+### 7.3 Cross-Validation
+
+- Primary split: chronological 70% train / 15% validation / 15% test.
+- Hyperparameter tuning uses `TimeSeriesSplit(n_splits=5)` within the training fold via `RandomizedSearchCV`.
+- Best model selected by lowest test RMSE.
+
+### 7.4 Models Evaluated
+
+1. **Persistence baseline:** ŷ(t+1) = PM2.5(t) — simple carry-forward of yesterday's value.
+2. **Seasonal-naive baseline:** ŷ(t+1) = PM2.5 on the same weekday one week prior.
+3. **Ridge Regression:** Standardized features, alpha selected by CV over [0.001, 0.01, 0.1, 1.0, 10.0, 100.0].
+4. **Random Forest Regressor:** Tuned with `RandomizedSearchCV` over n_estimators, max_depth, min_samples_leaf, max_features.
+
+---
+
+## 8. Limitations
+
+- **Synthetic data only:** This study uses synthetically generated data for 3 Delhi monitoring stations over a 3-year period. Real-world performance may differ.
+- **Single city:** The model is trained on Delhi data; direct generalization to other cities is not validated.
+- **Mode B optimism:** Mode B results use observed future weather as a proxy for forecasts. Real weather forecasts introduce additional error.
+- **Static models:** Models are trained once; seasonal drift or sensor calibration changes are not handled automatically.
+- **AQI approximation:** The Indian AQI calculation requires at least 3 pollutants including PM2.5 or PM10; in periods where fewer pollutants are available, AQI may be missing.
+- **No deep learning:** LSTM, Transformer, or other sequence models are listed as future work and not evaluated here.
+
+---
+
+## 9. Future Work
+
+- **Gradient boosting:** Evaluate `HistGradientBoostingRegressor` and XGBoost/LightGBM for potentially better accuracy.
+- **SARIMAX:** Time-series modelling with exogenous weather variables for one station.
+- **Deep learning:** LSTM and Transformer architectures for sequence modelling.
+- **Satellite data:** Integrate MODIS/VIIRS AOD (Aerosol Optical Depth) as an additional predictor.
+- **Multi-city generalization:** Transfer learning or city-agnostic features for pan-India deployment.
+- **Live data pipeline:** Automatic daily refresh from CPCB/OpenAQ and Open-Meteo forecast API.
+- **Probabilistic forecasts:** Quantile regression or conformal prediction for uncertainty intervals.
+- **Mobile app:** Native iOS/Android app consuming the FastAPI backend.
+
+---
+
+*Report generated by `src.report.generate` using real data from `data/aqi.db`.*
