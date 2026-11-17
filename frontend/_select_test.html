@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    body { background:#0a0e17; padding:48px; display:flex; gap:40px; align-items:flex-start; font-family:sans-serif; }
+    .col p { color:#fff; margin:0 0 10px; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="col">
+    <p>Normal (closed)</p>
+    <select class="form-control" style="max-width:260px">
+      <option>A — Strict forecast (fastest)</option>
+      <option>B — With weather forecast</option>
+      <option>Both A &amp; B (slowest)</option>
+    </select>
+  </div>
+  <div class="col">
+    <p>Focused (autofocus — the reported bug state)</p>
+    <select class="form-control" style="max-width:260px" autofocus>
+      <option>A — Strict forecast (fastest)</option>
+      <option>B — With weather forecast</option>
+      <option>Both A &amp; B (slowest)</option>
+    </select>
+  </div>
+</body>
+</html>
